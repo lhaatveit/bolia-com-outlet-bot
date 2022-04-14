@@ -25,7 +25,7 @@ fun main(args: Array<String>) {
     val receiveSaleItemSubscriptions = receiveUpdates
         .doOnNext { println("Update from Telegram: $it") }
         .filter { it.message?.text?.startsWith("/subscribe") ?: false }
-        .map { it.message!!.chat.id to it.message!!.text!!.substringAfter("/subscribe ") }
+        .map { it.message!!.chat.id to it.message.text!!.substringAfter("/subscribe ") }
         .map { (chatId, filter) -> BotSubscriptionCommandState(chatId, filter) }
         .delayUntil { cmd ->
             if (cmd.filter.isValidFilter) {
