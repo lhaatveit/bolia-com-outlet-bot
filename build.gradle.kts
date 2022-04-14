@@ -31,6 +31,8 @@ jib {
         }
     }
     to {
-        image = "https://ghcr.io/"
+        image = "https://ghcr.io/lhaatveit/bolia-com-outlet-bot"
+        auth.password = System.getenv("JIB_AUTH_PASSWORD")
+        auth.username = System.getenv("JIB_AUTH_USERNAME")
     }
 }
