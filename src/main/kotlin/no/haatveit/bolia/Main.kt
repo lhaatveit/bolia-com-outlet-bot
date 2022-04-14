@@ -2,7 +2,7 @@ package no.haatveit.bolia
 
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import reactor.util.retry.Retry
+import reactor.util.retry.RetryBackoffSpec
 import reactor.util.retry.RetrySpec
 import java.net.URI
 import java.net.URL
@@ -11,44 +11,8 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse.BodyHandlers
 import java.time.Duration
 
-val BOLIA_API_URI: String = System.getenv("API_URI")
-    ?: "https://www.bolia.com/api/search/outlet?includerangelimits=true&language=nb-no&mode=category&pageLink=5471&size=2000&v=2021.4143.1215.1-48"
-val BOLIA_POLL_INTERVAL_SECONDS: Long = System.getenv("POLL_INTERVAL_SECONDS")?.toLong() ?: 10L
-val TELEGRAM_BOT_TOKEN: String by System.getenv()
-
-val TELEGRAM_API_URL = "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN"
-
-fun queryWebApi(endpoint: URI = URI(BOLIA_API_URI)): Mono<Set<Result>> {
-    return Mono.defer {
-        val client = HttpClient.newHttpClient()
-        val res = client.send(
-            HttpRequest.newBuilder(endpoint).GET().build(), BodyHandlers.ofInputStream()
-        )
-        val result = OBJECT_MAPPER.readValue(res.body(), ApiResult::class.java)
-        Mono.just(result).map { it.products.toResultSet() }
-    }
-}
-
-fun Products.toResultSet(): Set<Result> = results.flatMap { it.results }.toSet()
-
-fun receiveOutletSaleResultSet(queryFn: () -> Mono<Set<Result>> = { queryWebApi() }): Flux<Set<Result>> =
-    Flux.interval(Duration.ofSeconds(BOLIA_POLL_INTERVAL_SECONDS))
-        .onBackpressureDrop()
-        .flatMap { queryFn() }
-        .distinctUntilChanged()
-
-val Result.blurbText: String
-    get() {
-        return "$title - ${salesPrice?.amount} - $discountText - ${location?.name}"
-    }
-
-val Result.url: URL
-    get() = URL(
-        "https://www.bolia.com/nb-no/mot-oss/butikker/online-outlet/produkt/${this.urlPath}"
-    )
-
 /**
- * Publish changes to the observed set.
+ * Publish new additions to the observed set.
  */
 fun <T> Flux<Set<T>>.changes(): Flux<T> =
     scan(emptySet<T>() to emptySet<T>()) { (prev, _), next -> next to (next - prev) }
@@ -56,7 +20,7 @@ fun <T> Flux<Set<T>>.changes(): Flux<T> =
 
 val String.isValidFilter: Boolean get() = length in 3..255 && matches(Regex("""\w*"""))
 
-val RETRY_FOREVER_WITH_BACKOFF = RetrySpec.backoff(Long.MAX_VALUE, Duration.ofSeconds(10))
+val RETRY_FOREVER_WITH_BACKOFF: RetryBackoffSpec = RetrySpec.backoff(Long.MAX_VALUE, Duration.ofSeconds(10))
 
 fun main(args: Array<String>) {
 
@@ -77,7 +41,7 @@ fun main(args: Array<String>) {
             }
         }
         .filter { it.filter.isValidFilter }
-        .scanPersistent(Persistence.STATE_PATH.toFile(), BotState(), { acc: BotState, sub ->
+        .scanPersistent(Persistence.DEFAULT_PATH.toFile(), BotState(), { acc: BotState, sub ->
             acc.copy(subscriptions = acc.subscriptions + sub)
         })
         .doOnNext { println("Subscriptions: ${it.subscriptions}") }

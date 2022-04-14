@@ -10,7 +10,8 @@ import java.util.function.BiFunction
 
 object Persistence {
 
-    val STATE_PATH = Path.of("~/.bolia/state.json")
+    private val HOME_DIRECTORY: Path = Path.of(System.getProperty("user.home"))
+    val DEFAULT_PATH: Path = HOME_DIRECTORY.resolve(Path.of(".bolia", "state.json"))
 
     inline fun <reified T> store(file: File, o: T): Mono<Void> = Mono.fromRunnable {
         println("Writing to ${file.toPath().toAbsolutePath()}")

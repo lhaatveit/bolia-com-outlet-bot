@@ -11,6 +11,9 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicLong
 
+val TELEGRAM_BOT_TOKEN: String by System.getenv()
+val TELEGRAM_API_URL = "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN"
+
 enum class Command(val str: String) {
     SUBSCRIBE("subscribe"),
     UNSUBSCRIBE("unsubscribe"),

@@ -1,14 +1,55 @@
 package no.haatveit.bolia
 
+import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
+import java.net.URI
+import java.net.URL
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 
-data class Option (
+val BOLIA_API_URI: String = System.getenv("API_URI")
+    ?: "https://www.bolia.com/api/search/outlet?includerangelimits=true&language=nb-no&mode=category&pageLink=5471&size=2000&v=2021.4143.1215.1-48"
+val BOLIA_POLL_INTERVAL_SECONDS: Long = System.getenv("POLL_INTERVAL_SECONDS")?.toLong() ?: 10L
+
+fun queryWebApi(endpoint: URI = URI(BOLIA_API_URI)): Mono<Set<Result>> {
+    return Mono.defer {
+        val client = HttpClient.newHttpClient()
+        val res = client.send(
+            HttpRequest.newBuilder(endpoint).GET().build(), HttpResponse.BodyHandlers.ofInputStream()
+        )
+        val result = OBJECT_MAPPER.readValue(res.body(), ApiResult::class.java)
+        Mono.just(result).map { it.products.toResultSet() }
+    }
+}
+
+fun Products.toResultSet(): Set<Result> = results.flatMap { it.results }.toSet()
+
+fun receiveOutletSaleResultSet(queryFn: () -> Mono<Set<Result>> = { queryWebApi() }): Flux<Set<Result>> =
+    Flux.interval(Duration.ofSeconds(BOLIA_POLL_INTERVAL_SECONDS))
+        .onBackpressureDrop()
+        .flatMap { queryFn() }
+        .distinctUntilChanged()
+
+val Result.blurbText: String
+    get() {
+        return "$title - ${salesPrice?.amount} - $discountText - ${location?.name}"
+    }
+
+val Result.url: URL
+    get() = URL(
+        "https://www.bolia.com/nb-no/mot-oss/butikker/online-outlet/produkt/${this.urlPath}"
+    )
+
+data class Option(
     val title: String?,
     val value: String?,
     val selected: Boolean,
     val count: Int,
 )
 
-data class Facet (
+data class Facet(
     val title: String?,
     val id: String?,
     val type: String?,
@@ -25,7 +66,7 @@ data class RangeFacetLimit(
     val ceil: Double = 0.0
 )
 
-data class Location (
+data class Location(
     val inventoryLocationId: String? = null,
     val hub: String? = null,
     val name: String? = null,
@@ -33,26 +74,26 @@ data class Location (
     val storeId: String? = null,
 )
 
-data class Raw (
+data class Raw(
     val amount: Double = 0.0,
     val currency: String? = null
 )
 
-data class ListPrice (
+data class ListPrice(
     val raw: Raw? = null,
     val amount: String? = null,
     val amountWithDecimals: String? = null,
     val currencyCode: String? = null
 )
 
-data class SalesPrice (
+data class SalesPrice(
     val raw: Raw? = null,
     val amount: String? = null,
     val amountWithDecimals: String? = null,
     val currencyCode: String? = null
 )
 
-data class Result (
+data class Result(
     val recId: Any? = null,
     val inventSerial: String? = null,
     val imageVersion: Int = 0,
@@ -68,17 +109,17 @@ data class Result (
     val title: String
 )
 
-class Results (
+class Results(
     val results: ArrayList<Result>,
     val type: String?
 )
 
-data class Products (
+data class Products(
     val total: Int = 0,
     val results: ArrayList<Results>
 )
 
-data class Image (
+data class Image(
     val url: String? = null,
     val focus: Boolean = false,
     val zoom: Boolean = false,
@@ -90,7 +131,7 @@ data class Image (
     val height: Int = 0
 )
 
-data class CategoryHeroBanner (
+data class CategoryHeroBanner(
     val image: Image? = null,
     val imageUrl: String? = null,
     val videoSrc: String? = null,
@@ -104,7 +145,7 @@ data class CategoryHeroBanner (
     val isCountDownEnabled: Boolean = false,
 )
 
-data class ApiResult (
+data class ApiResult(
     val facets: ArrayList<Facet>? = null,
     val rangeFacetLimits: ArrayList<RangeFacetLimit>? = null,
     val showAsProducts: Boolean = false,
