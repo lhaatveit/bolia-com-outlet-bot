@@ -1,14 +1,8 @@
 package no.haatveit.bolia
 
 import reactor.core.publisher.Flux
-import reactor.core.publisher.Mono
 import reactor.util.retry.RetryBackoffSpec
 import reactor.util.retry.RetrySpec
-import java.net.URI
-import java.net.URL
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse.BodyHandlers
 import java.time.Duration
 
 /**
@@ -41,7 +35,7 @@ fun main(args: Array<String>) {
             }
         }
         .filter { it.filter.isValidFilter }
-        .scanPersistent(Persistence.DEFAULT_PATH.toFile(), BotState(), { acc: BotState, sub ->
+        .scanPersistent("state", BotState(), { acc: BotState, sub ->
             acc.copy(subscriptions = acc.subscriptions + sub)
         })
         .doOnNext { println("Subscriptions: ${it.subscriptions}") }
@@ -53,8 +47,9 @@ fun main(args: Array<String>) {
         .cache(1)
         .retryWhen(RETRY_FOREVER_WITH_BACKOFF)
 
+    // Publish responses for search queries
     val publishSearchResults = receiveUpdates.filter { it.message?.text?.startsWith("/search") ?: false }
-        .map { BotSearchCommand(it.message!!.chat.id, it.message!!.text!!.substringAfter("/search ")) }
+        .map { BotSearchCommand(it.message!!.chat.id, it.message.text!!.substringAfter("/search ")) }
         .withLatestFrom(resultSetPublisher) { cmd, saleItems -> cmd to saleItems }
         .flatMap { (cmd, saleItems) ->
             val results = saleItems.filter { it.title.contains(cmd.filter, ignoreCase = true) }
@@ -68,10 +63,26 @@ fun main(args: Array<String>) {
             )
         }
 
-    val receiveNewSaleItems = resultSetPublisher.changes()
+    // Publish changes from the web API
+    val receiveNewSaleItems = resultSetPublisher.changes().share()
 
-    val publishNewItemsAlerts = receiveNewSaleItems
-        .doOnNext { println("New item on sale: ${it.blurbText}") }
+    // Publish the set of processed record IDs
+    val processedRecIdsPublisher = receiveNewSaleItems
+        .scanPersistent("processed_records", emptySet(), { processed: Set<String>, result ->
+            processed + result.recId.toString()
+        })
+
+    // Publish sale items which haven't been reported yet
+    val unprocessedNewSaleItemPublisher = receiveNewSaleItems.withLatestFrom(processedRecIdsPublisher) {
+        record, processedIds ->
+        record to processedIds
+    }
+        .filter { (record, processedIds) -> record.recId.toString() !in processedIds }
+        .map { (record, _) -> record }
+
+    // Publish alerts based on TG subscriptions
+    val publishNewItemsAlerts = unprocessedNewSaleItemPublisher
+        .doOnNext { println("New item on sale: ${it.blurbText} (${it.recId})") }
         .withLatestFrom(receiveSaleItemSubscriptions) { result, subCommands -> result to subCommands }
         .flatMapIterable { (result, subs) ->
             subs.filter { sub -> result.title.contains(sub.filter, ignoreCase = true) }
