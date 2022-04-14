@@ -17,6 +17,10 @@ dependencies {
     implementation("io.projectreactor:reactor-core:3.4.16")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.2")
     implementation("org.whispersystems:signal-protocol-java:2.8.1")
+    implementation("org.slf4j:log4j-over-slf4j:1.7.36")
+    implementation("org.apache.logging.log4j:log4j-core:2.17.2")
+    implementation("org.apache.logging.log4j:log4j-slf4j-impl:2.17.2")
+    implementation("org.apache.logging.log4j:log4j-api:2.17.2")
 }
 
 jib {

@@ -1,5 +1,6 @@
 package no.haatveit.bolia
 
+import org.slf4j.LoggerFactory
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.net.URI
@@ -9,12 +10,15 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
+private val LOGGER = LoggerFactory.getLogger("no.haatveit.bolia.Bolia")
+
 val BOLIA_API_URI: String = System.getenv("API_URI")
     ?: "https://www.bolia.com/api/search/outlet?includerangelimits=true&language=nb-no&mode=category&pageLink=5471&size=2000&v=2021.4143.1215.1-48"
 val BOLIA_POLL_INTERVAL_SECONDS: Long = System.getenv("POLL_INTERVAL_SECONDS")?.toLong() ?: 10L
 
 fun queryWebApi(endpoint: URI = URI(BOLIA_API_URI)): Mono<Set<Result>> {
     return Mono.defer {
+        LOGGER.debug("Polling $endpoint")
         val client = HttpClient.newHttpClient()
         val res = client.send(
             HttpRequest.newBuilder(endpoint).GET().build(), HttpResponse.BodyHandlers.ofInputStream()

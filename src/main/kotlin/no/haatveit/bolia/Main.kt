@@ -1,9 +1,12 @@
 package no.haatveit.bolia
 
+import org.slf4j.LoggerFactory
 import reactor.core.publisher.Flux
 import reactor.util.retry.RetryBackoffSpec
 import reactor.util.retry.RetrySpec
 import java.time.Duration
+
+private val LOGGER = LoggerFactory.getLogger("no.haatveit.bolia.Main")
 
 /**
  * Publish new additions to the observed set.
@@ -16,14 +19,14 @@ val String.isValidFilter: Boolean get() = length in 3..255 && matches(Regex("""\
 
 val RETRY_FOREVER_WITH_BACKOFF: RetryBackoffSpec = RetrySpec.backoff(Long.MAX_VALUE, Duration.ofSeconds(10))
 
-fun main(args: Array<String>) {
+fun main() {
 
     val receiveUpdates = receiveUpdates(null)
         .retryWhen(RETRY_FOREVER_WITH_BACKOFF)
         .share()
 
     val receiveSaleItemSubscriptions = receiveUpdates
-        .doOnNext { println("Update from Telegram: $it") }
+        .doOnNext { LOGGER.info("Update from Telegram: $it") }
         .filter { it.message?.text?.startsWith("/subscribe") ?: false }
         .map { it.message!!.chat.id to it.message.text!!.substringAfter("/subscribe ") }
         .map { (chatId, filter) -> BotSubscriptionCommandState(chatId, filter) }
@@ -38,7 +41,7 @@ fun main(args: Array<String>) {
         .scanPersistent("state", BotState(), { acc: BotState, sub ->
             acc.copy(subscriptions = acc.subscriptions + sub)
         })
-        .doOnNext { println("Subscriptions: ${it.subscriptions}") }
+        .doOnNext { LOGGER.info("Subscriptions: ${it.subscriptions}") }
         .map { it.subscriptions }
         .filter { it.isNotEmpty() }
         .share()
@@ -82,14 +85,15 @@ fun main(args: Array<String>) {
 
     // Publish alerts based on TG subscriptions
     val publishNewItemsAlerts = unprocessedNewSaleItemPublisher
-        .doOnNext { println("New item on sale: ${it.blurbText} (${it.recId})") }
+        .doOnNext { LOGGER.info("New item on sale: ${it.blurbText} (${it.recId})") }
         .withLatestFrom(receiveSaleItemSubscriptions) { result, subCommands -> result to subCommands }
         .flatMapIterable { (result, subs) ->
             subs.filter { sub -> result.title.contains(sub.filter, ignoreCase = true) }
                 .map { chat -> result to chat }
         }
         .flatMap { (result, subCommand) ->
-            sendMessage(subCommand.chatId, "${result.blurbText}. ${result.url}")
+            sendMessage(subCommand.chatId, "New outlet item! ${result.blurbText}. ${result.url}")
+                .doOnNext { LOGGER.info("Sent notification message to ${subCommand.chatId} for item ${result.recId}") }
         }
 
     val publishCommands = setBotCommands(

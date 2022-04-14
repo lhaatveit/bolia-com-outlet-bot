@@ -1,6 +1,8 @@
 package no.haatveit.bolia
 
 import no.haatveit.bolia.Persistence.CONF_DIRECTORY
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.io.File
@@ -11,18 +13,22 @@ import java.util.function.BiFunction
 
 object Persistence {
 
+    val LOGGER: Logger = LoggerFactory.getLogger("no.haatveit.bolia.Persistence")
+
     private val HOME_DIRECTORY: Path = Path.of(System.getProperty("user.home"))
     val CONF_DIRECTORY: Path = HOME_DIRECTORY.resolve(".bolia")
 
     inline fun <reified T> store(file: File, o: T): Mono<Void> = Mono.fromRunnable {
-        println("Writing to ${file.toPath().toAbsolutePath()}")
+        LOGGER.debug("Writing to ${file.toPath().toAbsolutePath()}")
         file.toPath().parent.toFile().mkdirs()
         OBJECT_MAPPER.writeValue(file, o)
     }
 
     inline fun <reified T> load(file: File): Mono<T> =
         Mono.fromSupplier { OBJECT_MAPPER.readValue(file, T::class.java) }
-            .onErrorResume(FileNotFoundException::class.java) { Mono.empty() }
+            .onErrorResume(FileNotFoundException::class.java) {
+                Mono.fromRunnable { LOGGER.warn("No such file: ${file.path}") }
+            }
 }
 
 inline fun <T, reified A> Flux<T>.scanPersistent(
