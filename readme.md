@@ -1,3 +1,3 @@
-# Bolia.com outlet bot
+# Bolia outlet notifier
 
-A Telegram bot for notifying when new outlet items are added on bolia.com.
+Notifies on Telegram when new outlet items are added on bolia.com.
