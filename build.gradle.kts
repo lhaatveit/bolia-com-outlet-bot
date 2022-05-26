@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     kotlin("jvm") version "1.5.10"
     id("com.google.cloud.tools.jib") version "3.2.1"
@@ -21,6 +23,12 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core:2.17.2")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl:2.17.2")
     implementation("org.apache.logging.log4j:log4j-api:2.17.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.8.2")
+    testImplementation("io.projectreactor:reactor-test:3.4.16")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 jib {
@@ -41,4 +49,10 @@ jib {
         auth.password = System.getenv("JIB_AUTH_PASSWORD")
         auth.username = System.getenv("JIB_AUTH_USERNAME")
     }
+}
+
+val compileKotlin: KotlinCompile by tasks
+
+compileKotlin.kotlinOptions {
+    languageVersion = "1.4"
 }

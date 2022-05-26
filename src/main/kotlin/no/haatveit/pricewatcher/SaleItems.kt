@@ -1,4 +1,4 @@
-package no.haatveit.bolia
+package no.haatveit.pricewatcher
 
 import org.slf4j.LoggerFactory
 import reactor.core.publisher.Flux
@@ -10,28 +10,33 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
-private val LOGGER = LoggerFactory.getLogger("no.haatveit.bolia.Bolia")
+private val LOGGER = LoggerFactory.getLogger("no.haatveit.pricewatcher.SaleItems")
 
-val BOLIA_API_URI: String = System.getenv("API_URI")
+val SALE_ITEMS_API_URL: String = System.getenv("API_URI")
     ?: "https://www.bolia.com/api/search/outlet?includerangelimits=true&language=nb-no&mode=category&pageLink=5471&size=2000&v=2021.4143.1215.1-48"
-val BOLIA_POLL_INTERVAL_SECONDS: Long = System.getenv("POLL_INTERVAL_SECONDS")?.toLong() ?: 10L
+val SALE_ITEMS_POLL_INTERVAL: Long = System.getenv("POLL_INTERVAL_SECONDS")?.toLong() ?: 10L
 
-fun queryWebApi(endpoint: URI = URI(BOLIA_API_URI)): Mono<Set<Result>> {
-    return Mono.defer {
+typealias SaleItems = Set<Result>
+
+fun querySaleItems(endpoint: URI = URI(SALE_ITEMS_API_URL)): Mono<SaleItems> {
+    fun Products.getAllSaleItems(): SaleItems = results.flatMap { it.results }.toSet()
+    return Mono.fromSupplier {
         LOGGER.debug("Polling $endpoint")
         val client = HttpClient.newHttpClient()
         val res = client.send(
-            HttpRequest.newBuilder(endpoint).GET().build(), HttpResponse.BodyHandlers.ofInputStream()
+            HttpRequest.newBuilder(endpoint)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofInputStream()
         )
-        val result = OBJECT_MAPPER.readValue(res.body(), ApiResult::class.java)
-        Mono.just(result).map { it.products.toResultSet() }
+        OBJECT_MAPPER.readValue(res.body(), ApiResult::class.java)
+            .products
+            .getAllSaleItems()
     }
 }
 
-fun Products.toResultSet(): Set<Result> = results.flatMap { it.results }.toSet()
-
-fun receiveOutletSaleResultSet(queryFn: () -> Mono<Set<Result>> = { queryWebApi() }): Flux<Set<Result>> =
-    Flux.interval(Duration.ofSeconds(BOLIA_POLL_INTERVAL_SECONDS))
+fun receiveSaleItems(queryFn: () -> Mono<SaleItems> = { querySaleItems() }): Flux<SaleItems> =
+    Flux.interval(Duration.ofSeconds(SALE_ITEMS_POLL_INTERVAL))
         .onBackpressureDrop()
         .flatMap { queryFn() }
         .distinctUntilChanged()

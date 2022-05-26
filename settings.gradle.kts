@@ -1,1 +1,1 @@
-rootProject.name = "bolia"
+rootProject.name = "pricewatcher"

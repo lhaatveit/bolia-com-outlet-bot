@@ -1,4 +1,4 @@
-package no.haatveit.bolia
+package no.haatveit.pricewatcher
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -12,7 +12,7 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicLong
 
-private val LOGGER = LoggerFactory.getLogger("no.haatveit.bolia.Telegram")
+private val LOGGER = LoggerFactory.getLogger("no.haatveit.pricewatcher.Telegram")
 
 val TELEGRAM_BOT_TOKEN: String by System.getenv()
 val TELEGRAM_API_URL = "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN"
@@ -30,7 +30,7 @@ data class User(val id: Long, val username: String?)
 data class Chat(val id: Long, val type: String, val title: String?)
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class Message(
+data class TelegramMessage(
     val message_id: Long,
     val from: User?,
     val sender_chat: Chat?,
@@ -45,10 +45,10 @@ data class MessageEntity(
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class Update(
+data class TelegramUpdate(
     @JsonProperty("update_id") val updateId: Long,
-    val message: Message?,
-    @JsonProperty("edited_message") val editedMessage: Message?,
+    val message: TelegramMessage?,
+    @JsonProperty("edited_message") val editedMessage: TelegramMessage?,
     val entities: List<MessageEntity>?,
 )
 
@@ -84,7 +84,7 @@ private inline fun <reified T, reified R> invokeTelegramMethod(method: String, r
         .doOnError { e -> LOGGER.error("Call to $method failed", e) }
 }
 
-fun setBotCommands(commands: List<BotCommand>): Mono<Void> {
+fun setTelegramCommands(commands: List<BotCommand>): Mono<Void> {
     data class SetMyCommandsRequest(
         val commands: List<BotCommand>
     )
@@ -95,7 +95,7 @@ fun setBotCommands(commands: List<BotCommand>): Mono<Void> {
     ).then()
 }
 
-fun receiveUpdates(startFromOffset: Long?, pollInterval: Duration = Duration.ofSeconds(10)): Flux<Update> {
+fun receiveUpdates(startFromOffset: Long?, pollInterval: Duration = Duration.ofSeconds(10)): Flux<TelegramUpdate> {
 
     data class GetUpdates(
         val offset: Long?,
@@ -104,7 +104,7 @@ fun receiveUpdates(startFromOffset: Long?, pollInterval: Duration = Duration.ofS
         val allowed_updates: List<String> = listOf("message")
     )
 
-    class Updates : ArrayList<Update>()
+    class Updates : ArrayList<TelegramUpdate>()
 
     fun invokeGetUpdate(offset: Long?) = invokeTelegramMethod<GetUpdates, Updates>(
         "getUpdates",
@@ -140,8 +140,8 @@ data class SendMessage(
     }
 }
 
-fun sendMessage(chatId: Long, text: String): Mono<Message> {
-    return invokeTelegramMethod<SendMessage, Message>(
+fun sendMessage(chatId: Long, text: String): Mono<TelegramMessage> {
+    return invokeTelegramMethod<SendMessage, TelegramMessage>(
         "sendMessage",
         SendMessage(chatId, text)
     )

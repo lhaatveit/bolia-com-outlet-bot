@@ -1,3 +1,3 @@
-# Bolia outlet notifier
+# Online outlet item notifier
 
-Notifies on Telegram when new outlet items are added on bolia.com.
+Notifies on Telegram when new items are available on online outlets.
